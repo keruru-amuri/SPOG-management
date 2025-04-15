@@ -1,10 +1,17 @@
 const bcrypt = require('bcrypt');
 const { createClient } = require('@supabase/supabase-js');
+require('dotenv').config({ path: '.env.local' });
 
 // Create Supabase client
-const supabaseUrl = 'https://corhzxqrxtgidcsghkjx.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNvcmh6eHFyeHRnaWRjc2doa2p4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ2NDcwMjIsImV4cCI6MjA2MDIyMzAyMn0.3SJTmo0u5d_ouVGZ3EysKAh1m6t20CWU8ggtdSyW2gg';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  console.error('Missing required environment variables. Please check your .env.local file.');
+  process.exit(1);
+}
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 // Hash password function
 async function hashPassword(password: string): Promise<string> {
@@ -13,8 +20,17 @@ async function hashPassword(password: string): Promise<string> {
 
 async function updateAdminPassword() {
   try {
+    // Get password from command line arguments or prompt for it
+    const newPassword = process.argv[2];
+
+    if (!newPassword) {
+      console.error('Please provide a password as a command line argument');
+      console.error('Usage: node update-admin-password.js <new-password>');
+      process.exit(1);
+    }
+
     // Hash the password
-    const passwordHash = await hashPassword('admin123');
+    const passwordHash = await hashPassword(newPassword);
 
     // Update the admin user's password
     const { data, error } = await supabase
