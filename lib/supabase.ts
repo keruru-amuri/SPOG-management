@@ -41,6 +41,17 @@ export type InventoryItem = {
   updated_at: string;
   // Computed property (not in DB)
   status?: 'normal' | 'low' | 'critical';
+  // Join with locations table
+  locations?: {
+    id: string;
+    name: string;
+    description?: string | null;
+  };
+  // Properties needed for ConsumptionModal
+  currentBalance?: number;
+  originalAmount?: number;
+  consumptionUnit?: string;
+  location?: string;
 };
 
 export type ConsumptionRecord = {

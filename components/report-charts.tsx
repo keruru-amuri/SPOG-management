@@ -90,6 +90,8 @@ export const ConsumptionTrendChart: React.FC<ConsumptionTrendChartProps> = ({
   const groupedData = React.useMemo(() => {
     if (!consumptionData.length) return {};
 
+    console.log('ConsumptionTrendChart received data:', consumptionData.length, 'records');
+
     // Create date intervals based on groupBy
     let intervals: Date[];
     if (groupBy === 'day') {
@@ -116,29 +118,58 @@ export const ConsumptionTrendChart: React.FC<ConsumptionTrendChartProps> = ({
 
     // Aggregate consumption data
     consumptionData.forEach(record => {
-      const date = parseISO(record.timestamp);
-      let key;
-      if (groupBy === 'day') {
-        key = format(date, 'yyyy-MM-dd');
-      } else if (groupBy === 'week') {
-        key = `Week ${format(date, 'w')}`;
-      } else {
-        key = format(date, 'yyyy-MM');
-      }
+      try {
+        // Handle both string timestamps and Date objects
+        const date = typeof record.timestamp === 'string' ? parseISO(record.timestamp) : record.timestamp;
+        let key;
+        if (groupBy === 'day') {
+          key = format(date, 'yyyy-MM-dd');
+        } else if (groupBy === 'week') {
+          key = `Week ${format(date, 'w')}`;
+        } else {
+          key = format(date, 'yyyy-MM');
+        }
 
-      if (result[key] !== undefined) {
-        result[key] += Number(record.amount);
+        if (result[key] !== undefined) {
+          result[key] += Number(record.amount);
+        }
+      } catch (error) {
+        console.error('Error processing record:', record, error);
       }
     });
 
+    console.log('Grouped data:', result);
     return result;
   }, [consumptionData, dateRange, groupBy]);
 
+  // Check if we have any data
+  const hasData = Object.values(groupedData).some(value => value > 0);
+  if (!hasData) {
+    console.log('No data to display in chart');
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-muted-foreground">No consumption data available for the selected period</p>
+      </div>
+    );
+  }
+
   const chartData: ChartData<'line'> = {
     labels: Object.keys(groupedData).map(key => {
-      if (groupBy === 'day') return format(parseISO(key), 'MMM dd');
+      if (groupBy === 'day') {
+        try {
+          return format(parseISO(key), 'MMM dd');
+        } catch (error) {
+          console.error('Error formatting day label:', key, error);
+          return key;
+        }
+      }
       if (groupBy === 'week') return key; // Already formatted as "Week X"
-      return format(parseISO(`${key}-01`), 'MMM yyyy');
+      try {
+        return format(parseISO(`${key}-01`), 'MMM yyyy');
+      } catch (error) {
+        console.error('Error formatting month label:', key, error);
+        return key;
+      }
     }),
     datasets: [
       {
@@ -151,6 +182,7 @@ export const ConsumptionTrendChart: React.FC<ConsumptionTrendChartProps> = ({
     ],
   };
 
+  console.log('Chart Data:', chartData);
   return <Line options={commonOptions} data={chartData} />;
 };
 

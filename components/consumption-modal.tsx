@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -14,8 +15,24 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { recordConsumption } from "@/lib/db/consumption"
+import { updateInventoryItem } from "@/lib/db/inventory"
+import { toast } from "@/components/ui/use-toast"
 
-interface Item {
+// Extend the Session type to include the user role and id
+declare module "next-auth" {
+  interface Session {
+    user: {
+      id: string;
+      name?: string | null;
+      email?: string | null;
+      image?: string | null;
+      role?: string;
+    }
+  }
+}
+
+export interface Item {
   id: string;
   name: string;
   currentBalance: number;
@@ -27,24 +44,131 @@ interface Item {
 }
 
 export function ConsumptionModal({ item, isOpen, onClose }: { item: Item; isOpen: boolean; onClose: () => void }) {
+  const { data: session } = useSession()
   const [amount, setAmount] = useState("")
-  const [isAdmin, setIsAdmin] = useState(false)
+  const [isAdmin] = useState(session?.user?.role === 'admin' || false)
   const [adjustedAmount, setAdjustedAmount] = useState("")
   const [reason, setReason] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-  const handleConsumptionSubmit = () => {
-    // Here you would handle the consumption logic
-    console.log(`Consumed ${amount} ${item.consumptionUnit} of ${item.name}`)
-    setAmount("")
-    onClose()
+  const handleConsumptionSubmit = async () => {
+    if (!session?.user?.id) {
+      toast({
+        title: "Authentication Error",
+        description: "You must be logged in to record consumption",
+        variant: "destructive"
+      })
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      // Convert amount to number
+      const numAmount = parseFloat(amount)
+
+      // Record consumption in the database
+      const result = await recordConsumption(
+        item.id,
+        session.user.id,
+        numAmount,
+        reason || undefined
+      )
+
+      if (result.success) {
+        toast({
+          title: "Consumption Recorded",
+          description: `Successfully recorded ${numAmount} ${item.consumptionUnit} of ${item.name}`,
+        })
+        setAmount("")
+        setReason("")
+        setErrorMessage(null) // Clear any previous error
+        onClose()
+      } else {
+        // Format the error message to be more user-friendly
+        let formattedError = result.message || "Failed to record consumption";
+
+        // If it's a balance error, make it more readable
+        if (formattedError.includes('Not enough balance:')) {
+          const parts = formattedError.split('Not enough balance:');
+          if (parts.length > 1) {
+            formattedError = `Insufficient stock: ${parts[1].trim()}`;
+          }
+        }
+
+        // Set the error message to display in the modal
+        setErrorMessage(formattedError)
+        setIsSubmitting(false)
+      }
+    } catch (error: any) {
+      console.warn('Error recording consumption:', error) // Changed from error to warn to avoid console errors
+
+      // Try to extract a meaningful error message
+      let formattedError = "An unexpected error occurred";
+
+      if (error?.message) {
+        // If it's a balance error, make it more readable
+        if (error.message.includes('Not enough balance:')) {
+          const parts = error.message.split('Not enough balance:');
+          if (parts.length > 1) {
+            formattedError = `Insufficient stock: ${parts[1].trim()}`;
+          } else {
+            formattedError = "Insufficient stock available";
+          }
+        } else {
+          formattedError = error.message;
+        }
+      }
+
+      // Set the error message to display in the modal
+      setErrorMessage(formattedError)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  const handleAdjustmentSubmit = () => {
-    // Here you would handle the adjustment logic
-    console.log(`Adjusted ${item.name} to ${adjustedAmount} ${item.unit}. Reason: ${reason}`)
-    setAdjustedAmount("")
-    setReason("")
-    onClose()
+  const handleAdjustmentSubmit = async () => {
+    if (!session?.user?.id) {
+      toast({
+        title: "Authentication Error",
+        description: "You must be logged in to adjust inventory",
+        variant: "destructive"
+      })
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      // Convert amount to number
+      const numAmount = parseFloat(adjustedAmount)
+
+      // Update the inventory item in the database
+      const updatedItem = await updateInventoryItem(item.id, {
+        current_balance: numAmount
+        // updated_at is handled automatically by Supabase
+      })
+
+      if (updatedItem) {
+        toast({
+          title: "Inventory Updated",
+          description: `Successfully adjusted ${item.name} to ${numAmount} ${item.unit}`,
+        })
+        setAdjustedAmount("")
+        setReason("")
+        setErrorMessage(null) // Clear any previous error
+        onClose()
+      } else {
+        setErrorMessage("Failed to update inventory. Please try again.")
+      }
+    } catch (error: any) {
+      console.warn('Error adjusting inventory:', error) // Changed from error to warn to avoid console errors
+
+      // Set a user-friendly error message
+      const errorMsg = error?.message || "An unexpected error occurred";
+      setErrorMessage(errorMsg)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -96,21 +220,51 @@ export function ConsumptionModal({ item, isOpen, onClose }: { item: Item; isOpen
                   placeholder={`Enter amount in ${item.consumptionUnit}`}
                   className="col-span-3"
                   value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
+                  onChange={(e) => {
+                    setAmount(e.target.value);
+                    // Clear error message when user changes input
+                    if (errorMessage) setErrorMessage(null);
+                  }}
                 />
                 <div className="flex h-10 items-center justify-center rounded-md border bg-muted px-4">
                   {item.consumptionUnit}
                 </div>
               </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="consumption-reason">Reason (Optional)</Label>
+                <Input
+                  id="consumption-reason"
+                  placeholder="e.g., Maintenance, Repair"
+                  value={reason}
+                  onChange={(e) => {
+                    setReason(e.target.value);
+                    // Clear error message when user changes input
+                    if (errorMessage) setErrorMessage(null);
+                  }}
+                />
+              </div>
             </div>
 
             <DialogFooter>
-              <Button variant="outline" onClick={onClose}>
+              <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
                 Cancel
               </Button>
-              <Button onClick={handleConsumptionSubmit} disabled={!amount}>
-                Record Usage
-              </Button>
+              <div className="space-y-2 w-full">
+                <Button
+                  onClick={handleConsumptionSubmit}
+                  disabled={!amount || isSubmitting}
+                  className="w-full"
+                >
+                  {isSubmitting ? "Recording..." : "Record Usage"}
+                </Button>
+
+                {errorMessage && (
+                  <div className="text-destructive text-sm font-medium p-2 border border-destructive bg-destructive/10 rounded-md">
+                    {errorMessage}
+                  </div>
+                )}
+              </div>
             </DialogFooter>
           </TabsContent>
 
@@ -126,7 +280,11 @@ export function ConsumptionModal({ item, isOpen, onClose }: { item: Item; isOpen
                   placeholder={`Enter new amount in ${item.unit}`}
                   className="col-span-3"
                   value={adjustedAmount}
-                  onChange={(e) => setAdjustedAmount(e.target.value)}
+                  onChange={(e) => {
+                    setAdjustedAmount(e.target.value);
+                    // Clear error message when user changes input
+                    if (errorMessage) setErrorMessage(null);
+                  }}
                 />
                 <div className="flex h-10 items-center justify-center rounded-md border bg-muted px-4">{item.unit}</div>
               </div>
@@ -137,18 +295,34 @@ export function ConsumptionModal({ item, isOpen, onClose }: { item: Item; isOpen
                   id="reason"
                   placeholder="e.g., Physical count, New container"
                   value={reason}
-                  onChange={(e) => setReason(e.target.value)}
+                  onChange={(e) => {
+                    setReason(e.target.value);
+                    // Clear error message when user changes input
+                    if (errorMessage) setErrorMessage(null);
+                  }}
                 />
               </div>
             </div>
 
             <DialogFooter>
-              <Button variant="outline" onClick={onClose}>
+              <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
                 Cancel
               </Button>
-              <Button onClick={handleAdjustmentSubmit} disabled={!adjustedAmount}>
-                Update Balance
-              </Button>
+              <div className="space-y-2 w-full">
+                <Button
+                  onClick={handleAdjustmentSubmit}
+                  disabled={!adjustedAmount || isSubmitting}
+                  className="w-full"
+                >
+                  {isSubmitting ? "Updating..." : "Update Balance"}
+                </Button>
+
+                {errorMessage && (
+                  <div className="text-destructive text-sm font-medium p-2 border border-destructive bg-destructive/10 rounded-md">
+                    {errorMessage}
+                  </div>
+                )}
+              </div>
             </DialogFooter>
           </TabsContent>
         </Tabs>
@@ -157,7 +331,7 @@ export function ConsumptionModal({ item, isOpen, onClose }: { item: Item; isOpen
   )
 }
 
-function getProgressColorClass(status) {
+function getProgressColorClass(status: 'normal' | 'low' | 'critical'): string {
   if (status === "normal") {
     return "bg-green-100 dark:bg-green-950"
   } else if (status === "low") {

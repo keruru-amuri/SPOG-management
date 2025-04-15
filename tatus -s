@@ -1,0 +1,20 @@
+warning: in the working copy of '.env.local', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/reports/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'components/report-charts.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'components/ui/progress.tsx', LF will be replaced by CRLF the next time Git touches it
+.env.local
+app/layout.tsx
+app/page.tsx
+app/reports/page.tsx
+components/consumption-modal.tsx
+components/location-selector.tsx
+components/report-charts.tsx
+components/ui/progress.tsx
+components/ui/toast.tsx
+lib/db/activity.ts
+lib/db/consumption.ts
+lib/db/inventory.ts
+lib/db/locations.ts
+lib/supabase.ts
+package-lock.json
+package.json

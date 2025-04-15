@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useSession } from "next-auth/react"
-import { BarChart3, BarChart, PieChart, LineChart, Download, Calendar, Filter } from "lucide-react"
+import { BarChart3, BarChart, PieChart, LineChart, Download, Calendar, Filter, ChartPie, LayoutDashboard } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -11,7 +11,7 @@ import { DatePickerWithRange } from "@/components/ui/date-range-picker"
 import { InventoryItem } from "@/lib/supabase"
 import { getAllInventoryItems } from "@/lib/db/inventory"
 import { getConsumptionRecordsByDateRange } from "@/lib/db/consumption"
-import { format } from "date-fns"
+import { format, parseISO, subDays, addDays, differenceInDays } from "date-fns"
 import Link from "next/link"
 import {
   ConsumptionTrendChart,
@@ -20,15 +20,21 @@ import {
   CategoryDistributionChart,
   LocationDistributionChart
 } from "@/components/report-charts"
+import { ExecutiveDashboard } from "@/components/executive-dashboard"
+import { InventoryHealthAnalysis } from "@/components/inventory-health-analysis"
+import { ConsumptionTrends } from "@/components/consumption-trends"
+import { ConsumptionForecasting } from "@/components/consumption-forecasting"
+import { ConsumptionByCategory } from "@/components/consumption-by-category"
+import { ConsumptionAnomaly } from "@/components/consumption-anomaly"
 
-// Define report types
-type ReportType = "consumption" | "inventory" | "category" | "location"
+// Import report constants
+import { REPORT_TYPES, ReportType, REPORT_COMPONENTS, getReportTypeName } from "@/lib/constants/reports"
 
 export default function ReportsPage() {
   const { data: session } = useSession()
-  const [reportType, setReportType] = useState<ReportType>("consumption")
+  const [reportType, setReportType] = useState<ReportType>(REPORT_TYPES.EXECUTIVE)
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date }>({
-    from: new Date(new Date().setMonth(new Date().getMonth() - 1)), // Default to last month
+    from: new Date(new Date().getFullYear(), new Date().getMonth() - 1, new Date().getDate()), // Default to last month
     to: new Date()
   })
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([])
@@ -51,7 +57,19 @@ export default function ReportsPage() {
           const fromDate = format(dateRange.from, "yyyy-MM-dd")
           const toDate = format(dateRange.to, "yyyy-MM-dd")
           const consumptionRecords = await getConsumptionRecordsByDateRange(fromDate, toDate)
-          setConsumptionData(consumptionRecords)
+
+          console.log('Fetched consumption records:', consumptionRecords.length)
+
+          // Use real consumption data if available, otherwise use sample data
+          if (consumptionRecords.length > 0) {
+            console.log('Using real consumption data')
+            setConsumptionData(consumptionRecords)
+          } else {
+            console.log('No consumption data found, generating sample data')
+            const sampleData = generateSampleConsumptionData(items, dateRange.from, dateRange.to)
+            console.log('Sample data generated:', sampleData.length, 'records')
+            setConsumptionData(sampleData)
+          }
         }
       } catch (error) {
         console.error("Error fetching report data:", error)
@@ -62,6 +80,45 @@ export default function ReportsPage() {
 
     fetchData()
   }, [dateRange])
+
+  // Generate sample consumption data for testing
+  const generateSampleConsumptionData = (items: InventoryItem[], startDate: Date, endDate: Date) => {
+    const sampleData = [];
+    const daysDiff = differenceInDays(endDate, startDate);
+
+    // Ensure we have at least 30 days of data
+    const effectiveDaysDiff = Math.max(30, daysDiff);
+
+    // Generate consumption records for each item
+    items.forEach((item, itemIndex) => {
+      // Generate data for each day
+      for (let i = 0; i < effectiveDaysDiff; i++) {
+        const date = addDays(startDate, i);
+
+        // Generate 1-3 consumption records for this item on this day
+        const recordsCount = Math.floor(Math.random() * 3) + 1;
+
+        for (let j = 0; j < recordsCount; j++) {
+          // Create a consumption pattern (higher on weekdays, lower on weekends)
+          const dayOfWeek = date.getDay(); // 0 = Sunday, 6 = Saturday
+          const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+          const baseAmount = isWeekend ? 2 : 5;
+          const randomVariation = Math.random() * 3;
+
+          sampleData.push({
+            id: `sample-${itemIndex}-${i}-${j}`,
+            inventory_item_id: item.id,
+            amount: baseAmount + randomVariation,
+            timestamp: format(date, 'yyyy-MM-dd'),
+            inventory_items: item
+          });
+        }
+      }
+    });
+
+    console.log(`Generated ${sampleData.length} sample consumption records for ${items.length} items`);
+    return sampleData;
+  };
 
   // Generate consumption report data
   const consumptionReportData = () => {
@@ -241,10 +298,13 @@ export default function ReportsPage() {
                         <SelectValue placeholder="Select report type" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="consumption">Consumption Report</SelectItem>
-                        <SelectItem value="inventory">Inventory Status</SelectItem>
-                        <SelectItem value="category">Category Analysis</SelectItem>
-                        <SelectItem value="location">Location Analysis</SelectItem>
+                        <SelectItem value={REPORT_TYPES.EXECUTIVE}>Executive Dashboard</SelectItem>
+                        <SelectItem value={REPORT_TYPES.CONSUMPTION}>Consumption Trends</SelectItem>
+                        <SelectItem value={REPORT_TYPES.FORECASTING}>Consumption Forecasting</SelectItem>
+                        <SelectItem value={REPORT_TYPES.ANOMALY}>Anomaly Detection</SelectItem>
+                        <SelectItem value={REPORT_TYPES.INVENTORY}>Inventory Status</SelectItem>
+                        <SelectItem value={REPORT_TYPES.CATEGORY}>Category Analysis</SelectItem>
+                        <SelectItem value={REPORT_TYPES.LOCATION}>Location Analysis</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -276,13 +336,17 @@ export default function ReportsPage() {
             <Card className="overflow-hidden">
               <CardHeader className="pb-2">
                 <CardTitle>
-                  {reportType === "consumption" && "Consumption Report"}
+                  {reportType === "executive" && "Executive Dashboard"}
+                  {reportType === "consumption" && "Consumption Trends"}
+                  {reportType === "forecasting" && "Consumption Forecasting"}
                   {reportType === "inventory" && "Inventory Status"}
                   {reportType === "category" && "Category Analysis"}
                   {reportType === "location" && "Location Analysis"}
                 </CardTitle>
                 <CardDescription>
+                  {reportType === "executive" && "High-level overview of inventory performance metrics"}
                   {reportType === "consumption" && `Showing consumption data from ${format(dateRange.from, "PPP")} to ${format(dateRange.to, "PPP")}`}
+                  {reportType === "forecasting" && "Predict future consumption patterns and optimize ordering"}
                   {reportType === "inventory" && "Current inventory status across all items"}
                   {reportType === "category" && "Analysis of inventory by category"}
                   {reportType === "location" && "Analysis of inventory by location"}
@@ -296,7 +360,39 @@ export default function ReportsPage() {
                 ) : (
                   <div className="space-y-4">
                     {/* Report content based on type */}
-                    {reportType === "consumption" && (
+                    {reportType === REPORT_TYPES.EXECUTIVE && (
+                      <ExecutiveDashboard
+                        inventoryItems={inventoryItems}
+                        consumptionData={consumptionData}
+                        isLoading={isLoading}
+                      />
+                    )}
+
+                    {reportType === REPORT_TYPES.CONSUMPTION && (
+                      <ConsumptionTrends
+                        inventoryItems={inventoryItems}
+                        consumptionData={consumptionData}
+                        isLoading={isLoading}
+                      />
+                    )}
+
+                    {reportType === REPORT_TYPES.FORECASTING && (
+                      <ConsumptionForecasting
+                        inventoryItems={inventoryItems}
+                        consumptionData={consumptionData}
+                        isLoading={isLoading}
+                      />
+                    )}
+
+                    {reportType === REPORT_TYPES.ANOMALY && (
+                      <ConsumptionAnomaly
+                        inventoryItems={inventoryItems}
+                        consumptionData={consumptionData}
+                        isLoading={isLoading}
+                      />
+                    )}
+
+                    {false && reportType === "consumption-old" && (
                       <div className="space-y-4">
                         <div className="rounded-lg border">
                           <div className="p-4">
@@ -367,7 +463,15 @@ export default function ReportsPage() {
                       </div>
                     )}
 
-                    {reportType === "inventory" && (
+                    {reportType === REPORT_TYPES.INVENTORY && (
+                      <InventoryHealthAnalysis
+                        inventoryItems={inventoryItems}
+                        consumptionData={consumptionData}
+                        isLoading={isLoading}
+                      />
+                    )}
+
+                    {false && reportType === "inventory-old" && (
                       <div className="space-y-4">
                         <div className="rounded-lg border">
                           <div className="p-4">
@@ -453,7 +557,15 @@ export default function ReportsPage() {
                       </div>
                     )}
 
-                    {reportType === "category" && (
+                    {reportType === REPORT_TYPES.CATEGORY && (
+                      <ConsumptionByCategory
+                        inventoryItems={inventoryItems}
+                        consumptionData={consumptionData}
+                        isLoading={isLoading}
+                      />
+                    )}
+
+                    {false && reportType === "category-old" && (
                       <div className="space-y-4">
                         <div className="rounded-lg border">
                           <div className="p-4">
@@ -499,7 +611,7 @@ export default function ReportsPage() {
                       </div>
                     )}
 
-                    {reportType === "location" && (
+                    {reportType === REPORT_TYPES.LOCATION && (
                       <div className="space-y-4">
                         <div className="rounded-lg border">
                           <div className="p-4">

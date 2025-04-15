@@ -4,17 +4,24 @@ import { supabase, Location } from '../supabase';
  * Get all locations
  */
 export async function getAllLocations(): Promise<Location[]> {
-  const { data, error } = await supabase
-    .from('locations')
-    .select('*')
-    .order('name');
-  
-  if (error) {
-    console.error('Error fetching locations:', error);
+  console.log('Fetching all locations...');
+  try {
+    const { data, error } = await supabase
+      .from('locations')
+      .select('*')
+      .order('name');
+
+    if (error) {
+      console.error('Error fetching locations:', error);
+      return [];
+    }
+
+    console.log('Locations fetched successfully:', data);
+    return data as Location[];
+  } catch (err) {
+    console.error('Unexpected error in getAllLocations:', err);
     return [];
   }
-  
-  return data as Location[];
 }
 
 /**
@@ -26,12 +33,12 @@ export async function getLocationById(id: string): Promise<Location | null> {
     .select('*')
     .eq('id', id)
     .single();
-  
+
   if (error) {
     console.error('Error fetching location:', error);
     return null;
   }
-  
+
   return data as Location;
 }
 
@@ -44,12 +51,12 @@ export async function createLocation(location: Omit<Location, 'id' | 'created_at
     .insert([location])
     .select()
     .single();
-  
+
   if (error) {
     console.error('Error creating location:', error);
     return null;
   }
-  
+
   return data as Location;
 }
 
@@ -63,12 +70,12 @@ export async function updateLocation(id: string, updates: Partial<Omit<Location,
     .eq('id', id)
     .select()
     .single();
-  
+
   if (error) {
     console.error('Error updating location:', error);
     return null;
   }
-  
+
   return data as Location;
 }
 
@@ -80,11 +87,11 @@ export async function deleteLocation(id: string): Promise<boolean> {
     .from('locations')
     .delete()
     .eq('id', id);
-  
+
   if (error) {
     console.error('Error deleting location:', error);
     return false;
   }
-  
+
   return true;
 }

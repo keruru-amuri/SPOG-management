@@ -45,8 +45,8 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold">SPOG Inventory</CardTitle>
-          <CardDescription>Sign in to manage your sealant, paint, oil, and grease inventory</CardDescription>
+          <CardTitle className="text-2xl font-bold"><center>MABES SPOG Management Inventory</center></CardTitle>
+          <CardDescription><center>Sign in to manage your inventory</center></CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {error && (
@@ -82,7 +82,7 @@ export default function LoginPage() {
           </form>
         </CardContent>
         <CardFooter className="flex justify-center text-sm text-muted-foreground">
-          <p>Default admin credentials: username: admin, password: admin123</p>
+          <p>Development in prgress... Copyright MABES Digital & Strategy</p>
         </CardFooter>
       </Card>
     </div>

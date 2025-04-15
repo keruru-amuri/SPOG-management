@@ -6,14 +6,22 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { MapPin, Check, ChevronsUpDown } from "lucide-react"
 import { useState } from "react"
 
-const locations = [
-  { value: "All Locations", label: "All Locations" },
-  { value: "Storage A", label: "Storage A" },
-  { value: "Storage B", label: "Storage B" },
-  { value: "Storage C", label: "Storage C" },
-]
+type LocationOption = {
+  value: string;
+  label: string;
+};
 
-export function LocationSelector({ currentLocation, setCurrentLocation }: { currentLocation: string; setCurrentLocation: (location: string) => void }) {
+interface LocationSelectorProps {
+  currentLocation: string;
+  setCurrentLocation: (location: string) => void;
+  locations?: LocationOption[];
+}
+
+export function LocationSelector({
+  currentLocation,
+  setCurrentLocation,
+  locations = [{ value: "All Locations", label: "All Locations" }]
+}: LocationSelectorProps) {
   const [open, setOpen] = useState(false)
 
   return (
